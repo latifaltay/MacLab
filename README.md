@@ -14,7 +14,7 @@ Network Security Tool is a powerful and versatile Python script designed to help
 - **IP Scanning:** Identify live IP addresses within a specified network range.
 - **Interactive Command-Line Interface:** User-friendly CLI for easy navigation and operation.
 
-## Prerequisites
+## Requirements
 
 Before running this script, ensure you have the following dependencies installed:
 
