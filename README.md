@@ -1,6 +1,6 @@
 # MACLAB
 
-![Scapy](https://img.shields.io/badge/Scapy-Python_3.x-green.svg?logo=python&logoColor=yellow)
+![Scapy](https://upload.wikimedia.org/wikipedia/commons/thumb/f/f8/Python_logo_and_wordmark.svg/486px-Python_logo_and_wordmark.svg.png)
 
 ## Overview
 
