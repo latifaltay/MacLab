@@ -1,4 +1,4 @@
-# Network Security Tool
+# MACLAB
 
 ![Python](https://img.shields.io/badge/Python-3.x-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
@@ -37,33 +37,6 @@ Clone the repository and navigate to the project directory:
 git clone https://github.com/yourusername/network-security-tool.git
 cd network-security-tool
 ```
-
-## Main Menu Options
-
-- List interfaces and change MAC address: Select a network interface and assign a random MAC address.
-  Perform Attack: Generate and send custom TCP packets to a target IP address.
- ``` List and select target IP addresses: Scan a specified network range to find live IP addresses. ```
- ``` Reset network interfaces: Restart a selected network interface. ```
- ``` Exit: Close the tool. ```
-
-Example Use Cases
-- MAC Address Change:
-
-Select the "List interfaces and change MAC address" option.
-Choose a network interface from the list.
-The tool will automatically generate and assign a new MAC address to the selected interface.
-Performing a TCP Flood Attack:
-
-Choose the "Perform Attack" option.
-Enter the target IP address.
-Specify the number of packets to send.
-Select the network interface to use.
-The tool will generate and send the packets to the target IP.
-Network Scanning:
-
-Select the "List and select target IP addresses" option.
-Enter the network range (e.g., 192.168.1.0/24).
-The tool will scan and display live IP addresses within the range.
 
 ## Note
 This tool is intended for educational and ethical hacking purposes only. Use responsibly and always obtain proper authorization before testing any network.
