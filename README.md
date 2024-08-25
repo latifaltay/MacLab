@@ -25,8 +25,9 @@ Before running this script, ensure you have the following dependencies installed
 
 To install the required Python packages, run:
 
-```bash
-pip install -r requirements.txt
+```bash 
+- pip install -r requirements.txt 
+```
 
 ## Usage
 
