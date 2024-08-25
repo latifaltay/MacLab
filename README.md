@@ -36,15 +36,18 @@ Clone the repository and navigate to the project directory:
 ```bash
 git clone https://github.com/yourusername/network-security-tool.git
 cd network-security-tool
+```
 
-Main Menu Options
-List interfaces and change MAC address: Select a network interface and assign a random MAC address.
-Perform Attack: Generate and send custom TCP packets to a target IP address.
-List and select target IP addresses: Scan a specified network range to find live IP addresses.
-Reset network interfaces: Restart a selected network interface.
-Exit: Close the tool.
+## Main Menu Options
+
+- List interfaces and change MAC address: Select a network interface and assign a random MAC address.
+  Perform Attack: Generate and send custom TCP packets to a target IP address.
+ ``` List and select target IP addresses: Scan a specified network range to find live IP addresses. ```
+ ``` Reset network interfaces: Restart a selected network interface. ```
+ ``` Exit: Close the tool. ```
+
 Example Use Cases
-MAC Address Change:
+- MAC Address Change:
 
 Select the "List interfaces and change MAC address" option.
 Choose a network interface from the list.
@@ -61,14 +64,15 @@ Network Scanning:
 Select the "List and select target IP addresses" option.
 Enter the network range (e.g., 192.168.1.0/24).
 The tool will scan and display live IP addresses within the range.
-Note
+
+## Note
 This tool is intended for educational and ethical hacking purposes only. Use responsibly and always obtain proper authorization before testing any network.
 
-License
-This project is licensed under the MIT License. See the LICENSE file for more details.
+## Authors
+Latif Altay
 
-Authors
-Dr. Gokhan Akin - Initial Work
-Latif Altay - Contributor
-Disclaimer
+## Mentor
+Dr. Gokhan Akin 
+ 
+## Disclaimer
 The author(s) of this tool are not responsible for any misuse or damage caused by the improper use of this tool. It is solely intended for educational purposes and should only be used in a lawful manner.
