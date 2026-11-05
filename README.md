@@ -1,7 +1,5 @@
 # MACLAB
 
-![Scapy](https://upload.wikimedia.org/wikipedia/commons/thumb/f/f8/Python_logo_and_wordmark.svg/486px-Python_logo_and_wordmark.svg.png)
-
 ## Overview
 
 Network Security Tool is a powerful and versatile Python script designed to help network administrators and cybersecurity enthusiasts perform various tasks such as MAC address manipulation, network interface management, IP address scanning, and TCP packet crafting for penetration testing purposes. This tool is particularly useful for ethical hackers who want to test network vulnerabilities and strengthen security measures.
