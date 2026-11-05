@@ -7,7 +7,8 @@ import logging
 import sys
 from scapy.all import *
 
-DEFAULT_SPEED = 5000  
+DEFAULT_SPEED = 5000
+MAX_PACKET_COUNT = 100000
 packet_counter_lock = threading.Lock()
 packet_counter = 0
 
@@ -188,7 +189,18 @@ def main():
             elif choice == '2':
                 target_ip = input("Enter target IP address: ")
                 if is_valid_ip(target_ip):
-                    packet_count = int(input("Enter number of packets to send: "))
+                    try:
+                        packet_count = int(input(
+                            f"Enter number of packets to send (1 - {MAX_PACKET_COUNT}): "
+                        ))
+                    except ValueError:
+                        print("Invalid packet count. Please enter a number.")
+                        print("")
+                        continue
+                    if not 1 <= packet_count <= MAX_PACKET_COUNT:
+                        print(f"Packet count must be between 1 and {MAX_PACKET_COUNT}.")
+                        print("")
+                        continue
                     iface = select_network_interface()
                     if iface:
                         perform_attack(target_ip, packet_count, iface)
